@@ -200,15 +200,18 @@
   }
 
   // Finds the nearest intersection (smallest t) of segment p1->p2 against a
-  // list of {p1,p2,type} candidate segments. Ignores hits that land right on
-  // top of p1 itself (e.g. resuming a stroke from a point that sits exactly
-  // on a wall after a crash).
-  function findNearestIntersection(p1, p2, segments) {
+  // list of {p1,p2,type} candidate segments. When ignoreNearStart is set,
+  // hits that land right on top of p1 are skipped -- this is only needed for
+  // a stroke's very first segment, where p1 may sit exactly on a wall (e.g.
+  // resuming from a crash point). Applying it to every segment would also
+  // suppress genuine crossings during a slow stroke, whose segments are only
+  // a pixel or two long, so callers must opt in per segment.
+  function findNearestIntersection(p1, p2, segments, ignoreNearStart) {
     let best = null;
     for (const seg of segments) {
       const hit = segIntersect(p1, p2, seg.p1, seg.p2);
       if (!hit) continue;
-      if (dist(hit, p1) < 2.5) continue; // ignore self-hit at the start point
+      if (ignoreNearStart && dist(hit, p1) < 2.5) continue; // ignore self-hit at the stroke's origin
       if (!best || hit.t < best.t) best = { x: hit.x, y: hit.y, t: hit.t, type: seg.type };
     }
     return best;
@@ -540,8 +543,9 @@
     const pos = getRelativePos(e);
     const stroke = game.currentStroke;
     const from = stroke.points[stroke.points.length - 1];
+    const isFirstSegment = stroke.points.length === 1;
 
-    const hit = findNearestIntersection(from, pos, track.collisionSegments);
+    const hit = findNearestIntersection(from, pos, track.collisionSegments, isFirstSegment);
     if (hit) {
       stroke.points.push({ x: hit.x, y: hit.y });
       endStroke(hit.type === "finish" ? "win" : "crash");
